@@ -1,33 +1,20 @@
-from __future__ import annotations
-import json, sqlite3, uuid
+import os, sqlite3, uuid
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
+import requests
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from fastapi.responses import FileResponse
 
-ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "signals.db"
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.getenv("DB_PATH", os.path.join(APP_DIR, "signals.db"))
+BASE_URL = "https://biquote.io"
+SYMBOLS = {"EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","NZDUSD","EURJPY","GBPJPY","XAUUSD"}
+INTERVALS = {"1m","5m","15m","30m","1h"}
 
-app = FastAPI(title="Mahim Quotex AI Signal Dashboard", version="2.0.0")
-app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
-
-class Candle(BaseModel):
-    time: str
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: Optional[float] = 0
-
-class AnalyzeRequest(BaseModel):
-    symbol: str = Field(default="EURUSD", min_length=2, max_length=30)
-    market: Literal["FOREX", "OTC"] = "FOREX"
-    timeframe: Literal["1m", "5m", "15m", "30m", "1h"] = "1m"
-    candles: list[Candle] = Field(min_length=55, max_length=2000)
-    source: str = "MANUAL_OR_AUTHORIZED_FEED"
+app = FastAPI(title="Mahim Quotex AI Signal Dashboard", version="4.0.0")
+app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
 
 def db():
     con = sqlite3.connect(DB_PATH)
@@ -36,146 +23,153 @@ def db():
 
 def init_db():
     with db() as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS signals (
-            id TEXT PRIMARY KEY, created_at TEXT, symbol TEXT, market TEXT,
-            timeframe TEXT, direction TEXT, score INTEGER, reasons TEXT,
-            reference_price REAL, source TEXT, outcome TEXT DEFAULT 'PENDING'
+        con.execute("""CREATE TABLE IF NOT EXISTS signals(
+            id TEXT PRIMARY KEY, created_at TEXT, symbol TEXT, interval TEXT,
+            signal TEXT, strength INTEGER, entry REAL, rationale TEXT,
+            outcome TEXT DEFAULT 'PENDING', evaluated_at TEXT
         )""")
+init_db()
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return FileResponse(os.path.join(APP_DIR, "static", "index.html"))
+
+def fetch_bars(symbol: str, interval: str, limit: int = 250):
+    if symbol not in SYMBOLS:
+        raise HTTPException(400, "Unsupported symbol")
+    if interval not in INTERVALS:
+        raise HTTPException(400, "Unsupported interval")
+    try:
+        r = requests.get(f"{BASE_URL}/api/{symbol}/ohlc",
+                         params={"interval": interval, "limit": limit},
+                         timeout=15)
+        r.raise_for_status()
+        payload = r.json()
+        bars = payload.get("bars")
+        if not isinstance(bars, list):
+            raise ValueError("API response has no bars array")
+        clean = []
+        for b in bars:
+            if b.get("isOpen") is True:
+                continue
+            row = {k: float(b[k]) for k in ("open","high","low","close")}
+            row["openTime"] = b["openTime"]
+            clean.append(row)
+        clean.sort(key=lambda x: x["openTime"])
+        if len(clean) < 60:
+            raise ValueError(f"Only {len(clean)} closed candles available; need at least 60")
+        return clean, payload
+    except requests.RequestException as e:
+        raise HTTPException(502, f"Market data provider error: {e}")
+    except (ValueError, KeyError, TypeError) as e:
+        raise HTTPException(502, f"Invalid market data response: {e}")
 
 def ema(values, period):
-    k = 2 / (period + 1)
+    alpha = 2/(period+1)
     out = [values[0]]
-    for v in values[1:]:
-        out.append(v * k + out[-1] * (1-k))
+    for x in values[1:]:
+        out.append(alpha*x + (1-alpha)*out[-1])
     return out
 
 def rsi(values, period=14):
     gains, losses = [], []
-    for i in range(1, len(values)):
-        d = values[i] - values[i-1]
-        gains.append(max(d, 0)); losses.append(max(-d, 0))
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
+    for a,b in zip(values[:-1], values[1:]):
+        gains.append(max(b-a,0))
+        losses.append(max(a-b,0))
+    if len(gains) < period: return 50.0
+    ag = sum(gains[:period])/period
+    al = sum(losses[:period])/period
     for i in range(period, len(gains)):
-        avg_gain = (avg_gain*(period-1) + gains[i]) / period
-        avg_loss = (avg_loss*(period-1) + losses[i]) / period
-    if avg_loss == 0: return 100.0
-    return 100 - (100 / (1 + avg_gain/avg_loss))
+        ag = (ag*(period-1)+gains[i])/period
+        al = (al*(period-1)+losses[i])/period
+    if al == 0: return 100.0
+    return 100 - 100/(1+ag/al)
 
-def analyze(req: AnalyzeRequest):
-    candles = req.candles
-    closes = [c.close for c in candles]
-    highs = [c.high for c in candles]
-    lows = [c.low for c in candles]
-    # Basic sanity checks: reject impossible OHLC rows.
-    for c in candles:
-        if c.high < max(c.open, c.close) or c.low > min(c.open, c.close) or c.high < c.low:
-            raise HTTPException(422, "Invalid OHLC candle: high/low do not contain open and close.")
-    e9, e21, e50 = ema(closes, 9), ema(closes, 21), ema(closes, 50)
+def analyse(bars):
+    closes = [b["close"] for b in bars]
+    e9, e21, e50 = ema(closes,9), ema(closes,21), ema(closes,50)
     r = rsi(closes)
-    macd_line = ema(closes, 12)[-1] - ema(closes, 26)[-1]
-    signal_line = ema([ema(closes, 12)[i] - ema(closes, 26)[i] for i in range(len(closes))], 9)[-1]
-    recent_range = sum(highs[-14:]) / 14 - sum(lows[-14:]) / 14
-    avg_range = sum((highs[i]-lows[i]) for i in range(-14, 0)) / 14
-    score = 0
-    reasons = []
-    if e9[-1] > e21[-1]:
-        score += 1; reasons.append("EMA 9 is above EMA 21 (short-term bullish).")
-    else:
-        score -= 1; reasons.append("EMA 9 is below EMA 21 (short-term bearish).")
-    if e21[-1] > e50[-1]:
-        score += 1; reasons.append("EMA 21 is above EMA 50 (trend bullish).")
-    else:
-        score -= 1; reasons.append("EMA 21 is below EMA 50 (trend bearish).")
-    if r >= 55:
-        score += 1; reasons.append(f"RSI is {r:.1f}, showing positive momentum.")
-    elif r <= 45:
-        score -= 1; reasons.append(f"RSI is {r:.1f}, showing negative momentum.")
-    else:
-        reasons.append(f"RSI is {r:.1f}, in a neutral zone.")
-    if macd_line > signal_line:
-        score += 1; reasons.append("MACD is above its signal line.")
-    else:
-        score -= 1; reasons.append("MACD is below its signal line.")
-    # Avoid overstating a direction in very low movement / conflicting conditions.
-    if score >= 3: direction = "CALL"
-    elif score <= -3: direction = "PUT"
-    else: direction = "WAIT"
-    strength = min(90, 50 + abs(score)*9)
-    if direction == "WAIT": strength = max(50, 65 - abs(score)*4)
-    latest = closes[-1]
-    candle_body = abs(candles[-1].close - candles[-1].open)
-    volatility = "HIGH" if avg_range > 0 and (avg_range / max(abs(latest), 1e-9))*10000 > 8 else "NORMAL/LOW"
-    if direction == "WAIT":
-        reasons.append("Indicators are mixed; waiting is safer than forcing a trade.")
-    return {
-        "direction": direction,
-        "score": score,
-        "signal_strength": strength,
-        "signal_strength_note": "Rule-based indicator strength only; NOT a win probability.",
-        "rsi": round(r, 2),
-        "ema9": round(e9[-1], 6), "ema21": round(e21[-1], 6), "ema50": round(e50[-1], 6),
-        "macd": round(macd_line, 8), "macd_signal": round(signal_line, 8),
-        "volatility": volatility,
-        "reference_price": latest,
-        "last_candle_time": candles[-1].time,
-        "reasons": reasons
-    }
-
-@app.on_event("startup")
-def startup():
-    init_db()
-
-@app.get("/")
-def home():
-    return FileResponse(ROOT / "static" / "index.html")
+    fast, slow = ema(closes,12), ema(closes,26)
+    macd = [a-b for a,b in zip(fast,slow)]
+    sigline = ema(macd,9)
+    votes = []
+    votes.append(1 if e9[-1] > e21[-1] else -1)
+    votes.append(1 if e21[-1] > e50[-1] else -1)
+    votes.append(1 if macd[-1] > sigline[-1] else -1)
+    votes.append(1 if closes[-1] > closes[-2] else -1)
+    if r >= 55: votes.append(1)
+    elif r <= 45: votes.append(-1)
+    else: votes.append(0)
+    score = sum(votes)
+    if score >= 3: signal = "CALL"
+    elif score <= -3: signal = "PUT"
+    else: signal = "WAIT"
+    strength = min(95, 50 + abs(score)*9) if signal != "WAIT" else 50
+    return {"signal":signal, "strength":strength, "rsi":round(r,2),
+            "ema9":round(e9[-1],6), "ema21":round(e21[-1],6),
+            "ema50":round(e50[-1],6), "macd":round(macd[-1],8),
+            "votes":votes, "score":score}
 
 @app.get("/api/health")
 def health():
-    return {"status":"ok", "version":"2.0.0",
-            "live_feed_connected":False,
-            "otc_feed_connected":False,
-            "message":"Analysis API is ready. No live Quotex feed is connected."}
+    return {"status":"ok","version":"4.0.0","database":"sqlite",
+            "market_provider":"Biquote","quotex_feed":False,
+            "otc_feed":False,"timestamp":datetime.now(timezone.utc).isoformat()}
 
-@app.post("/api/analyze")
-def api_analyze(req: AnalyzeRequest):
-    if req.market == "OTC":
-        raise HTTPException(501, "OTC analysis is disabled until a verified, authorized OTC candle feed is connected. Forex candles are not OTC data.")
-    result = analyze(req)
-    sid = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    with db() as con:
-        con.execute("""INSERT INTO signals
-            (id,created_at,symbol,market,timeframe,direction,score,reasons,reference_price,source)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (sid,now,req.symbol,req.market,req.timeframe,result["direction"],result["score"],
-             json.dumps(result["reasons"]),result["reference_price"],req.source))
-    result.update({"id":sid,"created_at":now,"symbol":req.symbol,"market":req.market,
-                   "timeframe":req.timeframe,"source":req.source})
-    return result
+@app.get("/api/market")
+def market(symbol: str="EURUSD", interval: str="1m"):
+    bars, payload = fetch_bars(symbol, interval)
+    latest = bars[-1]
+    return {"symbol":symbol,"interval":interval,"provider":"Biquote (MT5/Yahoo aggregated; not Quotex)",
+            "latest_closed_candle":latest,"candles":bars[-120:]}
+
+@app.get("/api/analyse")
+def get_analysis(symbol: str="EURUSD", interval: str="1m", save: bool=True):
+    bars, payload = fetch_bars(symbol, interval)
+    result = analyse(bars)
+    latest = bars[-1]
+    # Avoid pretending this is a guaranteed expiry prediction.
+    rationale = f"RSI {result['rsi']}; EMA9/21/50 and MACD confirmation; score {result['score']}."
+    record_id = str(uuid.uuid4())
+    if save:
+        with db() as con:
+            con.execute("""INSERT INTO signals(id,created_at,symbol,interval,signal,strength,entry,rationale)
+                        VALUES(?,?,?,?,?,?,?,?)""",
+                        (record_id,datetime.now(timezone.utc).isoformat(),symbol,interval,
+                         result["signal"],result["strength"],latest["close"],rationale))
+    return {"id":record_id if save else None,"symbol":symbol,"interval":interval,
+            "signal":result["signal"],"strength_score":result["strength"],
+            "strength_is_win_probability":False,"entry_reference":latest["close"],
+            "candle_time":latest["openTime"],"indicators":result,
+            "provider":"Biquote; not Quotex price feed",
+            "warning":"Educational rule-based analysis only. Not financial advice; no win guarantee."}
 
 @app.get("/api/history")
-def history(limit: int = 30):
-    limit = max(1, min(limit, 100))
+def history(limit: int=50):
+    limit=max(1,min(limit,200))
     with db() as con:
-        rows = con.execute("SELECT * FROM signals ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-    return [dict(r) for r in rows]
+        rows=con.execute("SELECT * FROM signals ORDER BY created_at DESC LIMIT ?",(limit,)).fetchall()
+    return [dict(x) for x in rows]
 
 @app.post("/api/outcome/{signal_id}")
-def update_outcome(signal_id: str, outcome: Literal["WIN","LOSS","DRAW"]):
+def outcome(signal_id: str, outcome: str):
+    outcome=outcome.upper()
+    if outcome not in {"WIN","LOSS","DRAW","PENDING"}:
+        raise HTTPException(400,"Outcome must be WIN, LOSS, DRAW or PENDING")
     with db() as con:
-        cur = con.execute("UPDATE signals SET outcome=? WHERE id=?", (outcome,signal_id))
+        cur=con.execute("UPDATE signals SET outcome=?, evaluated_at=? WHERE id=?",
+                        (outcome,datetime.now(timezone.utc).isoformat(),signal_id))
         if cur.rowcount == 0: raise HTTPException(404,"Signal not found")
-    return {"updated":True,"id":signal_id,"outcome":outcome}
+    return {"ok":True,"id":signal_id,"outcome":outcome}
 
 @app.get("/api/stats")
 def stats():
     with db() as con:
-        rows = con.execute("SELECT outcome, COUNT(*) n FROM signals GROUP BY outcome").fetchall()
-    counts = {r["outcome"]:r["n"] for r in rows}
-    settled = counts.get("WIN",0)+counts.get("LOSS",0)+counts.get("DRAW",0)
-    decisive = counts.get("WIN",0)+counts.get("LOSS",0)
-    return {"total":sum(counts.values()),"wins":counts.get("WIN",0),"losses":counts.get("LOSS",0),
-            "draws":counts.get("DRAW",0),"pending":counts.get("PENDING",0),
-            "recorded_win_rate_percent":round(counts.get("WIN",0)/decisive*100,1) if decisive else None,
-            "note":"This is only the rate of outcomes manually recorded by you; it is not a guarantee or a verified backtest."}
+        rows=con.execute("SELECT outcome, COUNT(*) n FROM signals GROUP BY outcome").fetchall()
+    counts={r["outcome"]:r["n"] for r in rows}
+    decided=counts.get("WIN",0)+counts.get("LOSS",0)+counts.get("DRAW",0)
+    winrate=round(counts.get("WIN",0)/decided*100,2) if decided else None
+    return {"total":sum(counts.values()),"wins":counts.get("WIN",0),
+            "losses":counts.get("LOSS",0),"draws":counts.get("DRAW",0),
+            "pending":counts.get("PENDING",0),"observed_win_rate_percent":winrate,
+            "note":"Only manually evaluated outcomes; not a forecast or guarantee."}
