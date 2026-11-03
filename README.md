@@ -1,6 +1,6 @@
 # Mahim Quotex AI Signal Dashboard V4
 
-## Run locally
+## Required folder layout\n```\nmain.py\nrequirements.txt\nrender.yaml\nREADME.md\nstatic/index.html\ntests/test_indicators.py\n```\n\nThe dashboard HTML must be inside `static/index.html`; do not upload it at the repository root.\n\n## Run locally
 ```bash
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000
