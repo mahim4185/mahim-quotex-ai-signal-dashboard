@@ -1,89 +1,35 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mahim Quotex AI Signal</title>
+<html lang="bn"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mahim Quotex AI</title>
 <style>
-:root{--bg:#080d18;--panel:#111a2b;--panel2:#0d1524;--line:#24324a;--text:#eef4ff;--muted:#8ea0ba;--green:#20d69a;--red:#ff637d;--yellow:#f4c65e;--blue:#6ba7ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 20% 0%,#142743 0,transparent 42%),var(--bg);color:var(--text);font:14px Inter,system-ui,Arial}
-header{height:70px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 5%;background:#080d18dd;position:sticky;top:0;z-index:2}
-.brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:17px}.logo{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#1ed69a,#3985ff);display:grid;place-items:center;color:#071322;font-weight:900}
-.badge{border:1px solid #245943;color:#72e7ba;background:#103125;padding:7px 11px;border-radius:30px;font-size:11px}
-main{max-width:1180px;margin:28px auto;padding:0 18px}.welcome{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:22px}.welcome h1{font-size:27px;margin:0 0 7px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:1.45fr 1fr;gap:16px}.panel{background:linear-gradient(160deg,#131e31,#0e1727);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 12px 30px #0002}.panel h2{font-size:15px;margin:0 0 16px}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}label{display:block;color:var(--muted);font-size:11px;margin-bottom:7px}select,input,textarea{width:100%;border:1px solid #2b3b55;background:#091321;color:var(--text);border-radius:9px;padding:11px;outline:none}button{border:0;border-radius:10px;padding:12px 16px;background:linear-gradient(100deg,#19c98e,#21a9b8);color:#061a19;font-weight:800;cursor:pointer}button.secondary{background:#1a2940;color:#d9e7ff;border:1px solid #30435f}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.signalbox{min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:linear-gradient(145deg,#0b1726,#101f32);border:1px solid var(--line);border-radius:13px;padding:20px}.signal{font-size:38px;font-weight:900;letter-spacing:1px;margin:8px}.signal.call{color:var(--green)}.signal.put{color:var(--red)}.signal.wait{color:var(--yellow)}.score{font-size:26px;font-weight:800;margin:7px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}.metric{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px}.metric small{display:block;color:var(--muted);margin-bottom:8px}.metric strong{font-size:18px}.lower{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.history{width:100%;border-collapse:collapse}.history th,.history td{text-align:left;padding:11px 7px;border-bottom:1px solid var(--line);font-size:12px}.history th{color:var(--muted);font-weight:500}.notice{border:1px solid #66532b;background:#302817;color:#f3d995;border-radius:11px;padding:12px;margin-top:16px;font-size:12px;line-height:1.5}.status{font-size:12px;color:var(--muted);margin-top:12px;min-height:18px}.footer{text-align:center;color:#71839d;font-size:11px;padding:26px}
-@media(max-width:760px){.grid,.lower{grid-template-columns:1fr}.welcome{align-items:start;flex-direction:column}.metrics{grid-template-columns:repeat(2,1fr)}header{padding:0 16px}.welcome h1{font-size:23px}.controls{grid-template-columns:1fr 1fr}}
-</style>
-</head>
-<body>
-<header><div class="brand"><div class="logo">M</div>MAHIM <span style="color:#68ddb2">QUOTEX AI</span></div><div class="badge">● API DASHBOARD</div></header>
-<main>
-<div class="welcome"><div><div class="muted" style="font-size:11px;letter-spacing:2px;margin-bottom:8px">TRADING ANALYSIS TERMINAL</div><h1>AI Signal Dashboard</h1><div class="muted">Technical indicators · Forex analysis · Signal history</div></div><div class="badge">● Dashboard ready</div></div>
-<div class="grid">
-<section class="panel"><h2>Market Configuration</h2>
-<div class="controls">
-<div><label>MARKET</label><select id="market"><option value="FOREX">Normal Forex</option><option value="OTC">Quotex OTC (feed required)</option></select></div>
-<div><label>CURRENCY PAIR</label><select id="symbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>AUDUSD</option><option>USDCAD</option><option>USDCHF</option><option>NZDUSD</option></select></div>
-<div><label>TIMEFRAME</label><select id="timeframe"><option value="1m">1 Minute</option><option value="5m">5 Minutes</option><option value="15m">15 Minutes</option></select></div>
-</div>
-<div class="actions"><button id="demoBtn">Run Demo Analysis</button><button class="secondary" id="apiBtn">Use API / My Candles</button></div>
-<div class="status" id="status">Demo mode uses illustrative sample candles, not live market prices.</div>
-<div id="candleArea" style="display:none;margin-top:14px"><label>PASTE JSON CANDLE ARRAY (at least 55 real, chronological OHLC candles)</label><textarea id="candles" rows="5" placeholder='[{"time":"...","open":1.1,"high":1.2,"low":1.0,"close":1.15}]'></textarea><div class="actions"><button id="submitBtn">Analyze My Candles</button></div></div>
-</section>
-<section class="panel"><h2>Signal Result</h2><div class="signalbox"><div class="muted" id="resultPair">EURUSD · FOREX · 1M</div><div class="signal wait" id="signal">WAIT</div><div class="muted" id="signalCaption">Run an analysis to see the result</div><div class="score" id="score">—</div><div class="muted" style="font-size:11px">Rule-based confidence score · not win probability</div></div></section>
-</div>
-<div class="metrics">
-<div class="metric"><small>RSI (14)</small><strong id="rsi">—</strong></div><div class="metric"><small>EMA TREND</small><strong id="ema">—</strong></div><div class="metric"><small>MACD</small><strong id="macd">—</strong></div><div class="metric"><small>LAST CLOSE</small><strong id="close">—</strong></div>
-</div>
-<div class="lower">
-<section class="panel"><h2>Indicator Summary</h2><table class="history"><tbody><tr><td>EMA 9</td><td id="ema9">—</td></tr><tr><td>EMA 21</td><td id="ema21">—</td></tr><tr><td>EMA 50</td><td id="ema50">—</td></tr><tr><td>Market Trend</td><td id="trend">—</td></tr></tbody></table></section>
-<section class="panel"><h2>Recent Signal History</h2><table class="history"><thead><tr><th>TIME</th><th>PAIR</th><th>SIGNAL</th><th>SCORE</th></tr></thead><tbody id="history"><tr><td colspan="4" class="muted">No analysis yet</td></tr></tbody></table></section>
-</div>
-<div class="notice"><b>Risk notice:</b> This dashboard is an educational technical-analysis tool, not financial advice. Signals are not guaranteed to win. Demo analysis uses generated sample candles. Quotex OTC prices are platform-specific and are not inferred from ordinary Forex data. Do not trade real money based only on these signals.</div>
-</main><div class="footer">MAHIM QUOTEX AI SIGNAL · FREE STARTER DASHBOARD</div>
-<script>
-const $=id=>document.getElementById(id);
-function showResult(d, isDemo=false){
-  $("resultPair").textContent=`${d.symbol} · ${d.market} · ${d.timeframe.toUpperCase()}${isDemo?" · DEMO":""}`;
-  $("signal").textContent=d.signal;$("signal").className="signal "+d.signal.toLowerCase();
-  $("signalCaption").textContent=d.signal==="WAIT"?"Indicators are mixed — wait for clearer conditions":d.indicators.trend+" trend detected";
-  $("score").textContent=d.confidence_score?d.confidence_score+"/100":"—";
-  $("rsi").textContent=d.indicators.rsi_14;$("ema").textContent=d.indicators.trend;$("macd").textContent=d.indicators.macd_direction;
-  $("close").textContent=d.latest_close;$("ema9").textContent=d.indicators.ema_9;$("ema21").textContent=d.indicators.ema_21;$("ema50").textContent=d.indicators.ema_50;$("trend").textContent=d.indicators.trend;
-  const row=document.createElement("tr");row.innerHTML=`<td>${new Date().toLocaleTimeString()}</td><td>${d.symbol}</td><td>${d.signal}</td><td>${d.confidence_score||"—"}</td>`;
-  if($("history").children.length===1 && $("history").innerText.includes("No analysis"))$("history").innerHTML="";
-  $("history").prepend(row);while($("history").children.length>6)$("history").lastChild.remove();
-}
-function sampleCandles(){
-  let p=1.08;const arr=[];
-  for(let i=0;i<70;i++){let drift=(Math.sin(i/7)*0.00018)+(i>45?0.00008:-0.000025);let o=p;p+=drift+(Math.sin(i*2.1)*0.00009);let c=p;arr.push({time:new Date(Date.now()-(69-i)*60000).toISOString(),open:o,high:Math.max(o,c)+0.00012,low:Math.min(o,c)-0.00012,close:c});}
-  return arr;
-}
-function localAnalyze(candles){
- const closes=candles.map(c=>c.close);
- const ema=(a,n)=>{let x=a[0],k=2/(n+1);for(let v of a.slice(1))x=v*k+x*(1-k);return x};
- const changes=closes.slice(1).map((v,i)=>v-closes[i]);const recent=changes.slice(-14);
- const gain=recent.reduce((s,v)=>s+Math.max(v,0),0)/14,loss=recent.reduce((s,v)=>s+Math.max(-v,0),0)/14;
- const rsi=loss===0?(gain?100:50):100-100/(1+gain/loss);
- const e9=ema(closes,9),e21=ema(closes,21),e50=ema(closes,50);
- const m=ema(closes,12)-ema(closes,26);
- const bull=+(e9>e21)+ +(e21>e50)+ +(rsi>50)+ +(m>0);
- const bear=+(e9<e21)+ +(e21<e50)+ +(rsi<50)+ +(m<0);
- let signal="WAIT",trend="MIXED",score=0;if(bull>=3){signal="CALL";trend="BULLISH";score=60+bull*8}else if(bear>=3){signal="PUT";trend="BEARISH";score=60+bear*8}
- return {symbol:$("symbol").value,market:"FOREX",timeframe:$("timeframe").value,signal,confidence_score:Math.min(score,92),indicators:{rsi_14:+rsi.toFixed(2),ema_9:+e9.toFixed(6),ema_21:+e21.toFixed(6),ema_50:+e50.toFixed(6),macd_direction:m>0?"BULLISH":m<0?"BEARISH":"NEUTRAL",trend},latest_close:+closes.at(-1).toFixed(6)};
-}
-$("demoBtn").onclick=()=>{
- if($("market").value==="OTC"){$("status").textContent="OTC is unavailable until a verified Quotex OTC candle feed is connected.";return}
- $("status").textContent="DEMO only: generated sample candles are being analyzed; this is not live data.";
- showResult(localAnalyze(sampleCandles()),true);
-};
-$("apiBtn").onclick=()=>{$("candleArea").style.display=$("candleArea").style.display==="none"?"block":"none";$("status").textContent="For real analysis, paste at least 55 genuine OHLC candles and connect this dashboard to the deployed API.";};
-$("submitBtn").onclick=async()=>{
- try{
-  const candles=JSON.parse($("candles").value);
-  const payload={symbol:$("symbol").value,market:$("market").value,timeframe:$("timeframe").value,candles};
-  $("status").textContent="Sending candles to API…";
-  const res=await fetch("/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-  const data=await res.json();if(!res.ok)throw new Error(data.detail||"API request failed");
-  showResult(data);$("status").textContent="Analysis completed by API.";
- }catch(e){$("status").textContent="Error: "+e.message;}
-};
+*{box-sizing:border-box}body{margin:0;background:#080f1e;color:#eef4ff;font-family:Arial,sans-serif}
+.wrap{max-width:950px;margin:auto;padding:20px}.top{padding:22px;border-radius:18px;background:linear-gradient(120deg,#122a4a,#14213a);border:1px solid #29466c}
+h1{margin:0 0 8px;font-size:26px}.muted{color:#a9bad2;font-size:14px;line-height:1.6}
+.card{background:#111c30;border:1px solid #263a59;border-radius:16px;padding:18px;margin-top:16px}
+label{display:block;color:#b8c8df;font-size:14px;margin:10px 0 6px}
+input,select,button{width:100%;padding:13px;border-radius:10px;border:1px solid #344967;background:#0a1425;color:white;font-size:15px}
+button{background:#1677e8;border:0;font-weight:bold;margin-top:12px;cursor:pointer}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.signal{font-size:34px;font-weight:800;margin:8px 0}.CALL{color:#36df9a}.PUT{color:#ff657b}.WAIT{color:#ffd166}
+.badge{display:inline-block;background:#253a59;padding:6px 10px;border-radius:20px;font-size:12px}
+.history{font-size:13px;color:#c8d6e8;line-height:1.9;overflow-wrap:anywhere}
+.notice{background:#332b17;border:1px solid #77602b;padding:12px;border-radius:10px;color:#ffe5a1;font-size:13px;line-height:1.6}
+@media(max-width:600px){.row{grid-template-columns:1fr}.wrap{padding:12px}h1{font-size:22px}}
+</style></head><body><main class="wrap">
+<header class="top"><h1>⚡ MAHIM QUOTEX AI</h1><div class="muted">Automatic market analysis · CALL / PUT / WAIT</div><p><span class="badge" id="feedStatus">Checking data source…</span></p></header>
+<section class="card"><h3>১. Demo Account ID</h3><div class="muted">শুধু ID সংরক্ষণ হবে। এটি Quotex-এ লগইন বা অ্যাকাউন্ট কানেক্ট করে না। পাসওয়ার্ড/OTP দেবেন না।</div>
+<label>Quotex Demo Account ID</label><input id="accountId" placeholder="তোমার Demo ID লিখো"><button onclick="saveId()">Save Demo ID</button><div class="muted" id="saved"></div></section>
+<section class="card"><h3>২. Auto Signal</h3><div class="row"><div><label>Market</label><select id="market" onchange="refreshSignal()"><option value="forex">Normal Forex</option><option value="otc">Quotex OTC</option></select></div>
+<div><label>Currency Pair</label><select id="symbol"><option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option><option>AUD/USD</option><option>USD/CAD</option><option>USD/CHF</option><option>NZD/USD</option></select></div></div>
+<label>Timeframe</label><select id="interval"><option value="1min">1 minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option></select>
+<button onclick="refreshSignal()">Analyze Now</button><div class="card"><div class="muted" id="pairTitle">EUR/USD · Forex</div><div class="signal WAIT" id="signal">WAIT</div><div id="reason" class="muted">Waiting for analysis…</div><p class="muted" id="stamp"></p></div></section>
+<section class="card"><h3>৩. Signal History</h3><div class="history" id="history">এখনো কোনো বিশ্লেষণ হয়নি।</div></section>
+<div class="notice" style="margin-top:16px">সতর্কতা: CALL/PUT কোনো নিশ্চিত ভবিষ্যদ্বাণী নয়। OTC-র যাচাইকৃত লাইভ ডেটা না থাকলে সিস্টেম WAIT দেখাবে। এই ওয়েবসাইট কোনো ট্রেড করবে না।</div>
+</main><script>
+const $=id=>document.getElementById(id);let hist=[];
+async function load(){try{let s=await fetch('/api/status').then(r=>r.json());$('feedStatus').textContent=s.provider_configured?'Forex feed: configured':'Forex feed: API key needed';let a=await fetch('/api/account').then(r=>r.json());$('accountId').value=a.account_id||'';}catch(e){$('feedStatus').textContent='Backend connection error';}}
+async function saveId(){let id=$('accountId').value.trim();if(!id){$('saved').textContent='আগে Demo ID লিখুন।';return;}let r=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account_id:id})});let d=await r.json();$('saved').textContent=d.saved?'Demo ID saved (label only).':'Could not save ID.';}
+async function refreshSignal(){let market=$('market').value,symbol=$('symbol').value,interval=$('interval').value;$('pairTitle').textContent=symbol+' · '+market.toUpperCase();$('signal').textContent='…';$('signal').className='signal WAIT';
+try{let d=await fetch(`/api/signal?market=${market}&symbol=${encodeURIComponent(symbol)}&interval=${interval}`).then(r=>r.json());$('signal').textContent=d.signal||'WAIT';$('signal').className='signal '+(d.signal||'WAIT');$('reason').textContent=d.reason||'No signal';$('stamp').textContent=(d.source||'')+' · '+new Date(d.timestamp).toLocaleString();hist.unshift(`${new Date().toLocaleTimeString()} — ${symbol} — ${d.signal||'WAIT'} — ${d.reason||''}`);hist=hist.slice(0,12);$('history').innerHTML=hist.map(x=>'• '+x).join('<br>');}catch(e){$('signal').textContent='WAIT';$('reason').textContent='Backend unavailable. Render deploy/check করুন।';}}
+load();refreshSignal();setInterval(refreshSignal,60000);
 </script></body></html>
