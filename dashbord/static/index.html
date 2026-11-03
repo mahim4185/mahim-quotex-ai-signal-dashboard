@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mahim Quotex AI Signal Dashboard</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e8eefc;font:15px Arial,sans-serif}
+main{max-width:950px;margin:auto;padding:20px}.card{background:#151f33;border:1px solid #263653;border-radius:14px;padding:18px;margin:14px 0}
+h1{font-size:25px;margin:4px 0 8px}.muted{color:#a9b8d2}.warning{background:#3b2a14;color:#ffdf9c;padding:12px;border-radius:10px}
+.row{display:flex;gap:10px;flex-wrap:wrap}select,button{padding:12px;border-radius:9px;border:1px solid #435573;background:#101a2b;color:white}
+button{background:#2563eb;border:0;font-weight:bold}button:disabled{opacity:.5}.big{font-size:34px;font-weight:bold;margin:12px 0}.green{color:#55e6a5}.red{color:#ff7f88}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px;border-bottom:1px solid #31405a;font-size:13px;word-break:break-word}
+@media(max-width:600px){main{padding:12px}.card{padding:14px}}
+</style></head><body><main>
+<h1>Mahim Quotex AI Signal Dashboard</h1><p class="muted">V4 · Forex research mode · Manual testing only</p>
+<div class="warning">সতর্কতা: এটি Quotex-এর নিজস্ব feed নয়। Signal strength কোনো win probability নয়। কোনো নিশ্চিত লাভ বা ১০০% accuracy নেই। OTC data সংযুক্ত নয়।</div>
+<section class="card"><h3>Market analysis</h3><div class="row">
+<select id="symbol"><option>EURUSD</option><option>GBPUSD</option><option>USDJPY</option><option>AUDUSD</option><option>USDCAD</option><option>USDCHF</option><option>NZDUSD</option><option>EURJPY</option><option>GBPJPY</option><option>XAUUSD</option></select>
+<select id="interval"><option>1m</option><option>5m</option><option>15m</option><option>30m</option><option>1h</option></select>
+<button onclick="analyse()">Run analysis</button></div><div id="result" class="muted">প্রথমে Run analysis চাপুন।</div><div id="feed" class="muted"></div></section>
+<section class="card"><h3>Performance report</h3><div id="stats" class="muted">Loading…</div></section>
+<section class="card"><h3>Signal history</h3><div style="overflow-x:auto"><table><thead><tr><th>Time</th><th>Pair</th><th>TF</th><th>Signal</th><th>Strength</th><th>Outcome</th><th>Mark result</th></tr></thead><tbody id="history"></tbody></table></div></section>
+</main><script>
+async function api(url,opts){let r=await fetch(url,opts);let j=await r.json();if(!r.ok)throw Error(j.detail||'Request failed');return j}
+async function analyse(){let b=document.querySelector('button');b.disabled=true;document.getElementById('result').textContent='Fetching real market candles…';try{
+let s=symbol.value,t=interval.value,j=await api(`/api/analyse?symbol=${s}&interval=${t}`);
+document.getElementById('result').innerHTML=`<div class="big ${j.signal==='CALL'?'green':j.signal==='PUT'?'red':''}">${j.signal}</div><p>Strength score: ${j.strength_score}/95 (not win probability)</p><p>Reference price: ${j.entry_reference}</p><p>RSI: ${j.indicators.rsi} · Score: ${j.indicators.score}</p><p class="muted">${j.warning}</p>`;
+document.getElementById('feed').textContent='Feed: '+j.provider+' · Candle: '+j.candle_time;
+await refresh()}catch(e){document.getElementById('result').textContent='No signal: '+e.message+' — feed/API check required.'}finally{b.disabled=false}}
+async function refresh(){try{let [h,s]=await Promise.all([api('/api/history'),api('/api/stats')]);
+document.getElementById('stats').textContent=`Total ${s.total} · Wins ${s.wins} · Losses ${s.losses} · Draws ${s.draws} · Pending ${s.pending} · Observed win rate ${s.observed_win_rate_percent===null?'Not enough results':s.observed_win_rate_percent+'%'}`;
+document.getElementById('history').innerHTML=h.map(x=>`<tr><td>${new Date(x.created_at).toLocaleString()}</td><td>${x.symbol}</td><td>${x.interval}</td><td>${x.signal}</td><td>${x.strength}</td><td>${x.outcome}</td><td>${x.outcome==='PENDING'?['WIN','LOSS','DRAW'].map(v=>`<button onclick="mark('${x.id}','${v}')">${v}</button>`).join(' '):'—'}</td></tr>`).join('')||'<tr><td colspan="7">No signals yet</td></tr>'}catch(e){document.getElementById('stats').textContent=e.message}}
+async function mark(id,v){try{await api(`/api/outcome/${id}?outcome=${v}`,{method:'POST'});await refresh()}catch(e){alert(e.message)}}
+api('/api/health').then(x=>document.getElementById('feed').textContent=`Server: ${x.status} · Provider: ${x.market_provider} · OTC: ${x.otc_feed?'yes':'no'}`).catch(e=>document.getElementById('feed').textContent='Server error: '+e.message);
+refresh();
+</script></body></html>
